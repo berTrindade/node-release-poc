@@ -1,76 +1,243 @@
-# Release process (node-release-poc)
+# Release Process: Automated Release (Semantic-Release)
 
-This document describes the core release process concepts used in this POC and how the repository implements them.
+This document describes the **automated release process** using semantic-release for fully automated CI/CD releases.
 
-Core concepts mapped to this repository
+## Automated Release Flow Diagram
 
-1. Versioning
+```text
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐
+│ Developer Work  │    │ Pull Request    │    │ Automated CI/CD Release │
+└─────────────────┘    └─────────────────┘    └─────────────────────────┘
+         │                       │                         │
+         │ 1. feat: add feature  │                         │
+         ├──────────────────────▶│                         │
+         │ 2. fix: resolve bug   │                         │
+         ├──────────────────────▶│ 3. PR Review & Merge   │
+         │ 3. docs: update guide │ ┌─────────────────────┐ │
+         ├──────────────────────▶│ │ • Code review       │ │
+         │                       │ │ • CI tests pass     │ │
+         │                       │ │ • Merge to main     │ │
+         │                       │ └─────────────────────┘ │
+         │                       │           │             │
+         │                       │           ▼             │
+         │                       │ 4. Trigger on push     │
+         │                       │    to main branch      │
+         │                       ├────────────────────────▶│
+         │                       │                         │ 5. Automated Release
+         │                       │                         ├───────────────────┐
+         │                       │                         │ • Analyze commits │
+         │                       │                         │ • Determine version│
+         │                       │                         │ • Update CHANGELOG│
+         │                       │                         │ • Commit & tag    │
+         │                       │                         │ • GitHub Release  │
+         │                       │                         │ • Publish to npm  │
+         │                       │                         │   (optional)      │
+         │                       │                         └───────────────────┘
+```
 
-- We use semantic versioning via `standard-version` (package.json scripts: `npm run release`).
-- `standard-version` bumps package.json, generates CHANGELOG.md based on Conventional Commits, and creates a git tag (e.g., `v1.2.0`).
+## 8 Core Release Process Concepts
 
-2. Branching Strategy
+### 1. **Versioning**
 
-- Short-lived feature branches are encouraged. Merge into `main`/`master` via pull request.
-- Releases are produced by tagging commits on `main` (or by CI on a release branch). Tag pushes trigger the release workflow.
+- **Tool**: `semantic-release` package
+- **Strategy**: Fully automated SemVer based on Conventional Commits
+- **Implementation**: 
+  - `semantic-release` analyzes commit history since last release
+  - Automatically determines next version (patch/minor/major)
+  - Updates `package.json` and creates git tag
+  - No manual intervention required
 
-3. Testing & Quality Gates
+### 2. **Branching Strategy**
 
-- Unit tests use Jest + Supertest (see `tests/`).
-- ESLint is configured and run in CI. Husky+lint-staged enforce pre-commit linting locally.
-- CI workflow runs lint + tests; failure stops the pipeline.
+- **Strategy**: GitHub Flow with protected main branch
+- **Implementation**: 
+  - Feature branches → PR → automated merge checks → merge to `main`
+  - Releases triggered automatically on every push to `main`
+  - No manual release branches needed
 
-4. Tagging & Artifacts
+### 3. **Testing & Quality Gates**
 
-- `standard-version` creates annotated tags (vX.Y.Z).
-- Build artifact is produced by `npm run build` (npm pack into `dist/`).
-- Release workflow attaches the tarball to the GitHub Release.
+- **Pre-merge**: All tests must pass before merge to `main`
+- **Release**: Only successful builds trigger releases
+- **Implementation**: 
+  - `npm test` (Jest + Supertest) runs on every PR
+  - `npm run lint` (ESLint) enforces code quality
+  - Failed tests block merge and prevent releases
 
-5. Automation (CI/CD)
+### 4. **Tagging & Artifacts**
 
-- GitHub Actions CI workflow runs on push and PR to run lint, tests, and create the package artifact.
-- Release workflow runs on tag push to produce a GitHub Release and attach artifacts.
+- **Tagging**: Fully automated via `semantic-release`
+- **Artifacts**: npm package + GitHub Release assets
+- **Implementation**:
+  - `semantic-release` creates annotated git tags
+  - Automatically builds and uploads tarball to GitHub Release
+  - Optional npm registry publishing
 
-6. Documentation & Changelogs
+### 5. **Automation (CI/CD)**
 
-- CHANGELOG.md is maintained by `standard-version` and included in releases.
-- This repository contains `RELEASE_PROCESS.md`, `CONTRIBUTING.md`, and `README.md` to document process and usage.
+- **CI**: Runs on every push/PR (lint, test, build)
+- **Release**: Fully automated on merge to `main`
+- **Implementation**:
+  - Single GitHub Actions workflow handles CI and CD
+  - Zero manual steps required for releases
+  - Conditional release job runs only on `main` branch
 
-7. Deployment & Rollback
+### 6. **Documentation & Changelogs**
 
-- This POC focuses on release artifacts and tagging. For production, replace the Release step with a deployment job that:
-  - Publishes images to a registry (e.g., Docker Hub, ECR) and/or uploads packages to a registry (npm, GitHub Packages).
-  - Uses tracked releases and image tags (e.g., `my-service:v1.2.0`).
-  - Supports rollback by redeploying a previous tag.
+- **Changelog**: Auto-generated and committed by `semantic-release`
+- **Release Notes**: Auto-generated for GitHub Releases
+- **Implementation**:
+  - `CHANGELOG.md` updated automatically
+  - Release descriptions generated from commit messages
+  - Documentation stays in sync with releases
 
-8. Monitoring & Feedback
+### 7. **Deployment & Rollback**
 
-- The POC exposes a `/health` endpoint for readiness/health checks. Production systems should integrate metrics, logs, and alerting.
+- **Deployment**: Triggered by successful release
+- **Rollback**: Git tag-based or npm version-based
+- **Implementation**:
+  - Each release creates immutable artifacts
+  - Tagged Docker images enable precise rollbacks
+  - npm version pinning for dependency rollbacks
 
-How repository components implement these concepts
+### 8. **Monitoring & Feedback**
 
-- package.json scripts:
+- **Release Tracking**: Automated notifications and metrics
+- **Health Monitoring**: Version-aware health checks
+- **Implementation**:
+  - GitHub Release notifications
+  - Version information in `/health` endpoint
+  - Integration with monitoring systems via release webhooks
 
-  - `lint`, `test`: local quality gates matching CI jobs (Testing & Quality Gates)
-  - `build`: creates an artifact for release (Tagging & Artifacts)
-  - `release`: runs `standard-version` to bump versions and generate changelog (Versioning & Documentation)
+## Automated Release Configuration
 
-- Husky + lint-staged + commitlint:
+### Required GitHub Secrets
 
-  - Enforce pre-commit lint fixes and Conventional Commit messages locally so commit history is usable by `standard-version` (Quality Gates, Documentation)
+Set these in your repository's Settings → Secrets and variables → Actions:
 
-- GitHub Actions workflows:
+1. **GITHUB_TOKEN** (automatically available)
+   - Used for creating releases and pushing commits
+   - Default token usually has sufficient permissions
 
-  - `ci.yml`: runs lint/test/build on PRs and pushes (Automation)
-  - `release.yml`: triggers on tag push to run final checks and create a GitHub Release with artifacts (Automation, Tagging & Artifacts)
+2. **NPM_TOKEN** (optional)
+   - Required only if publishing to npm registry
+   - Create at npmjs.com → Access Tokens
+   - Set as repository secret
 
-- CHANGELOG.md (managed by `standard-version`) captures human-friendly release notes (Documentation & Changelogs)
+### Semantic-Release Configuration
 
-- Dockerfile provides a production-lean container image to run releases (Deployment)
+File: `.releaserc.json`
+```json
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",      // Analyze commits for version
+    "@semantic-release/release-notes-generator", // Generate release notes
+    "@semantic-release/changelog",            // Update CHANGELOG.md
+    "@semantic-release/npm",                  // Publish to npm (optional)
+    "@semantic-release/git",                  // Commit version changes
+    "@semantic-release/github"                // Create GitHub Release
+  ]
+}
+```
 
-Extending this POC for production
+## Development Workflow
 
-- Add integration tests and end-to-end suites; run them in CI before release.
-- Wire in a container registry and deploy step in the release workflow (e.g., build and push Docker image, then deploy to staging/production).
-- Integrate canary or blue/green deployments with automated rollback based on health and metrics.
-- Add SSO and secrets handling (GitHub Actions secrets) and ensure least-privilege tokens for release automation.
+### 1. Create Feature Branch
+```bash
+git checkout -b feature/new-feature
+```
+
+### 2. Make Changes with Conventional Commits
+```bash
+git commit -m "feat: add user authentication endpoint"
+git commit -m "fix: resolve CORS issue in middleware"
+git commit -m "docs: update API documentation"
+```
+
+### 3. Create Pull Request
+- CI automatically runs lint + tests
+- Code review process
+- Merge when approved and tests pass
+
+### 4. Automatic Release (No Manual Steps!)
+- Merge to `main` triggers release workflow
+- `semantic-release` analyzes commits
+- Version bump, changelog, tag, and GitHub Release created automatically
+- Optional npm package publication
+
+## Commit Message Impact on Versioning
+
+| Commit Type | Version Bump | Example |
+|-------------|--------------|---------|
+| `fix:` | PATCH (1.0.1) | `fix: resolve authentication bug` |
+| `feat:` | MINOR (1.1.0) | `feat: add user profile endpoint` |
+| `feat!:` or `BREAKING CHANGE:` | MAJOR (2.0.0) | `feat!: change API response format` |
+| `docs:`, `style:`, `refactor:`, `test:`, `chore:` | No release | Documentation and maintenance |
+
+## Automated Release Benefits
+
+- **Zero Human Error**: No manual version bumping or tagging
+- **Consistent Process**: Same release process every time
+- **Fast Feedback**: Releases happen immediately after merge
+- **Audit Trail**: Complete release history in git and GitHub
+- **Parallel Development**: Multiple features can be merged and released quickly
+
+## Production Extensions
+
+### Enhanced Security
+- Use fine-grained personal access tokens instead of GITHUB_TOKEN
+- Implement signed commits and releases
+- Add dependency scanning and vulnerability checks
+
+### Advanced Deployment
+- Add deployment steps after successful release
+- Implement canary deployments with automated rollback
+- Integrate with Kubernetes for zero-downtime deployments
+
+### Monitoring and Observability
+- Add release metrics to monitoring dashboards
+- Implement automated health checks after deployment
+- Set up alerts for failed releases or deployments
+
+### Release Management
+- Add release approval workflows for production
+- Implement release schedules (e.g., release trains)
+- Add integration with project management tools
+
+## Repository Components
+
+### Package.json Scripts
+- `npm test`: Run test suite (blocks release if failing)
+- `npm run lint`: Run ESLint (blocks release if failing)
+- `npm run build`: Create distribution tarball
+- `npm run semantic-release`: Manual trigger for semantic-release (development)
+
+### GitHub Actions Workflow
+- **ci.yml**: Combined CI and release workflow
+  - **build-and-test job**: Runs on all pushes/PRs
+  - **release job**: Runs only on push to `main` after tests pass
+
+### Configuration Files
+- `.releaserc.json`: Semantic-release configuration
+- `commitlint.config.js`: Conventional Commits validation
+- `.lintstagedrc.json`: Pre-commit linting rules
+- `jest.config.js`: Test configuration
+- `.eslintrc.json`: Code linting rules
+
+## Troubleshooting
+
+### Release Not Triggered
+- Check that commits follow Conventional Commits format
+- Ensure at least one commit has `feat:` or `fix:` since last release
+- Verify CI tests are passing
+
+### Permission Errors
+- Check GITHUB_TOKEN permissions in repository settings
+- Ensure Actions have write permissions to repository
+- For npm publishing, verify NPM_TOKEN is valid
+
+### Failed Release
+- Check GitHub Actions logs for specific error messages
+- Common issues: test failures, linting errors, network timeouts
+- Semantic-release will retry on next push to `main`
