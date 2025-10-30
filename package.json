@@ -41,7 +41,6 @@
     },
     "standard-version": {
         "scripts": {
-            "postbump": "git push --follow-tags origin HEAD",
             "postchangelog": "git add CHANGELOG.md"
         }
     }
