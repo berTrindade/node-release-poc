@@ -97,3 +97,6 @@ docker run -p 3000:3000 node-release-poc:latest
 - **auto-release**: Fully automated releases via semantic-release on merge to main
 
 See `RELEASE_PROCESS.md` for comprehensive documentation of the 8 core release concepts and step-by-step manual release instructions.
+
+## Test Run
+Testing workflow execution after configuration fixes.
