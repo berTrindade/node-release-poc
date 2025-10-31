@@ -3,7 +3,11 @@ const express = require('express');
 const app = express();
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Hello from node-release-poc', version: '1.0.0' });
+  res.json({ 
+    message: 'Hello from node-release-poc!',
+    version: '1.0.0',
+    status: 'operational'
+  });
 });
 
 app.get('/health', (req, res) => {
